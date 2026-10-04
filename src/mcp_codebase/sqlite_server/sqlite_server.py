@@ -1,23 +1,22 @@
+import json
 import sqlite3
-from typing import List, Any
-from mcp.server.fastmcp import FastMCP
-
-import mcp.types as types
 from contextlib import closing
 from pathlib import Path
-from pydantic import AnyUrl
-import json
+from typing import Any, List
+
+import mcp.types as types
+from mcp.server import InitializationOptions
+from mcp.server.fastmcp import FastMCP
+from mcp.server.lowlevel import NotificationOptions, Server
 
 # mcp = FastMCP("SQLiteDB")
-
 from mcp.server.stdio import stdio_server
-from mcp.server import InitializationOptions
-from mcp.server.lowlevel import Server, NotificationOptions
+from pydantic import AnyUrl
 
 mcp = Server("SQLiteDB")
 
 # Change this path to point to your actual SQLite database file
-DB_PATH = "sqlite_server/sql_db.db"
+DB_PATH = Path(__file__).resolve().parent / "sql_db.db"
 
 class SqliteDatabase:
     def __init__(self, db_path: str):

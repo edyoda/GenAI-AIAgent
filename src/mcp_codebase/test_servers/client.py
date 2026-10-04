@@ -1,65 +1,75 @@
-# Create server parameters for stdio connection
 import asyncio
+import sys
+from pathlib import Path
 
-# async def main(question):
-#     server_params = StdioServerParameters(
-#         command="python",
-#         args=["test_servers/math_server.py"],
-#     )
-#     async with stdio_client(server_params) as (read, write):
-#         async with ClientSession(read, write) as session:
-#             # Initialize the connection
-#             await session.initialize()
-#             # Get tools
-#             tools = await load_mcp_tools(session)
-#             # Create and run the agent
-#             agent = create_react_agent(llm, tools) # , state_modifier = chat_prompt)
-#             agent_response = await agent.ainvoke({"messages": question})
-#             return agent_response
-# Run the async main function
-# question = "what is (3.3 * 2) + 1"
-# response = asyncio.run(main(question))
-# print(response["messages"][-1].content)
+# make mcp_codebase importable when running this file directly
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR.parent))
+
+# Create server parameters for stdio connection
+# from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
-from langgraph.prebuilt import create_react_agent
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from model_instance import llm
-
-# from langgraph.prebuilt import create_react_agent
+from utils import format_response
 
 
 async def main(question):
-    client =  MultiServerMCPClient(
-        {
-            "math": {
-                "command": "python",
-                "args": ["test_servers/math_server.py"],
-                "transport": "stdio",
-            },
-            "weather": {
-                "url": "http://localhost:8000/sse",
-                "transport": "sse",
-            }
-        }
+    server_params = StdioServerParameters(
+        command="python",
+        args=[str(BASE_DIR / "math_server.py")],
     )
-    tools = await client.get_tools()
-    agent = create_react_agent(llm, tools)
-    # math_response = await agent.ainvoke({"messages": "what's (3 + 5) x 12?"})
-    # weather_response = await agent.ainvoke({"messages": "what is the weather in nyc?"})
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            # Initialize the connection
+            await session.initialize()
+            # Get tools
+            tools = await load_mcp_tools(session)
+            # Create and run the agent
+            agent = create_agent(llm, tools)  # , state_modifier = chat_prompt)
+            agent_response = await agent.ainvoke({"messages": question})
+            return agent_response
 
-    response = await agent.ainvoke({"messages": question})
 
-    return response
+# Run the async main function
+if __name__ == "__main__":
+    question = "what is (3.3 * 2) + 1. Use the available tools for your analysis."
+    response = asyncio.run(main(question))
+    print(response["messages"][-1].content)
+
+
+# async def main(question):
+#     client = MultiServerMCPClient(
+#         {
+#             "math": {
+#                 "command": "python",
+#                 "args": [str(BASE_DIR / "math_server.py")],
+#                 "transport": "stdio",
+#             },
+#             "weather": {
+#                 "url": "http://localhost:8000/sse",
+#                 "transport": "sse",
+#             },
+#         }
+#     )
+#     tools = await client.get_tools()
+#     agent = create_agent(llm, tools)
+#     # math_response = await agent.ainvoke({"messages": "what's (3 + 5) x 12?"})
+#     # weather_response = await agent.ainvoke({"messages": "what is the weather in nyc?"})
+
+#     response = await agent.ainvoke({"messages": question})
+
+#     return response
+
 
 # question = "what is (3.3 * 2) + 1. also what is the weather in bangalore ?"
 # response = asyncio.run(main(question))
-# print("-*-"*60)
+# print("-*-" * 60)
 # print(f"Question: {question}\nResponse: ")
 # print(response["messages"][-1].content)
-
-
 
 
 # from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -75,7 +85,7 @@ async def main(question):
 #             "math": {
 #                 "command": "python",
 #                 # Make sure to update to the full absolute path to your math_server.py file
-#                 "args": ["test_servers/math_server.py"],
+#                 "args": [str(BASE_DIR / "math_server.py")],
 #                 "transport": "stdio",
 #             },
 #             "weather": {
@@ -110,12 +120,8 @@ async def main(question):
 #     # agent = create_react_agent(llm, tools, state_modifier = chat_prompt)
 #     response = await graph.ainvoke({"messages": question})
 #     return response
-    
-
-
-
 
 
 # question = "what is (3.3 * 2) + 1. also what is the weather in bangalore ?"
-# response = main(question)
+# response = asyncio.run(main(question))
 # print(response["messages"][-1].content)

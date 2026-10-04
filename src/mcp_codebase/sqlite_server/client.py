@@ -1,17 +1,18 @@
+import sys
+from pathlib import Path
+
 # Create server parameters for stdio connection
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-from langchain_mcp_adapters.tools import load_mcp_tools
-from langgraph.prebuilt import create_react_agent
-
-
-from model_instance import llm
-
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR.parent))
 import asyncio
 
-from langchain.prompts import ChatPromptTemplate
-
+# from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_mcp_adapters.tools import load_mcp_tools
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from model_instance import llm
 
 sys_msg = """You are a Business Intelligence (BI) assistant with access to a SQLite database. Your role is to help users explore the data, extract useful insights, and answer their questions using SQL and available tools.
  
@@ -33,15 +34,15 @@ Instructions:
 7. Think step-by-step. Communicate clearly and concisely.
 """
 
-chat_prompt = ChatPromptTemplate.from_messages([
-    ('system', sys_msg),
-    ("human", "{messages}")
-])
+# chat_prompt = ChatPromptTemplate.from_messages(
+#     [("system", sys_msg)]
+# )
+
 
 async def main(question):
     server_params = StdioServerParameters(
         command="python",
-        args= ["sqlite_server/sqlite_server.py"],
+        args=[str(BASE_DIR / "sqlite_server.py")],
     )
 
     async with stdio_client(server_params) as (read, write):
@@ -53,11 +54,12 @@ async def main(question):
             tools = await load_mcp_tools(session)
 
             # Create and run the agent
-            agent = create_react_agent(llm, tools, state_modifier = chat_prompt)
+            agent = create_agent(llm, tools, system_prompt=sys_msg)
             agent_response = await agent.ainvoke({"messages": question})
             return agent_response
 
-# Run the async main function
+
+# # Run the async main function
 
 # question = "what is the total number of patients?"
 # question = "show me what type of encounters are most common among patients with different races"
@@ -66,13 +68,10 @@ async def main(question):
 # print(response["messages"][-1].content)
 
 
+# ----------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------
 
-
-
-
-
-# from langchain_mcp_adapters.client import MultiServerMCPClient
-# from langgraph.prebuilt import create_react_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 
 # async def main(question):
@@ -98,8 +97,6 @@ async def main(question):
 #         response = await agent.ainvoke({"messages": question})
 
 #         return response, client
-
-
 
 
 # from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -154,10 +151,6 @@ async def main(question):
 #         # agent = create_react_agent(llm, tools, state_modifier = chat_prompt)
 #         response = await graph.ainvoke({"messages": question})
 #         return response
-    
-
-
-
 
 
 # question = "what is (3.3 * 2) + 1. also what is the weather in bangalore ?"

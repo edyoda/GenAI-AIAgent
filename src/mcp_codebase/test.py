@@ -1,6 +1,13 @@
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR))
+
 
 import asyncio
-test_content = 'test' #test, sqlite
+
+test_content = 'sqlite' #test, sqlite
 
 if test_content == "test":
 
@@ -12,7 +19,7 @@ elif test_content == 'sqlite':
 
     # sqlite server
     from sqlite_server.client import main
-    question = "what is the total number of patients?"
+    question = "what is the total number of tracks?"
     # question = "show me what type of encounters are most common among patients with different races"
     # question = "list of top patients by number of encounters."
 else:

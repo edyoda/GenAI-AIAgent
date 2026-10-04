@@ -1,5 +1,6 @@
 # weather_server.py
-from typing import List
+# from typing import List
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("Weather")
