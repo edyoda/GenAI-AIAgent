@@ -1,22 +1,18 @@
 import json
 import sqlite3
+import sys
 from contextlib import closing
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
-import mcp.types as types
-from mcp.server import InitializationOptions
 from mcp.server.fastmcp import FastMCP
-from mcp.server.lowlevel import NotificationOptions, Server
 
-# mcp = FastMCP("SQLiteDB")
-from mcp.server.stdio import stdio_server
-from pydantic import AnyUrl
-
-mcp = Server("SQLiteDB")
+# port 8000 is used by weather_server, so the HTTP transports use 8001
+mcp = FastMCP("SQLiteDB", port=8001)
 
 # Change this path to point to your actual SQLite database file
 DB_PATH = Path(__file__).resolve().parent / "sql_db.db"
+
 
 class SqliteDatabase:
     def __init__(self, db_path: str):
@@ -50,10 +46,10 @@ class SqliteDatabase:
 
         # print("Generated basic memo format")
         return memo
-    
+
     def _get_schema(self, table_name: str) -> str:
         try:
-            with open('schema.json', 'r') as f:
+            with open("schema.json", "r") as f:
                 data = json.load(f)
                 return data[table_name]
         except FileNotFoundError:
@@ -61,11 +57,14 @@ class SqliteDatabase:
         except KeyError:
             raise KeyError(f"Table '{table_name}' not found in schema.json")
 
-    def _execute_query(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def _execute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a SQL query and return results as a list of dictionaries"""
         # print(f"Executing query: {query}")
         try:
-            print(query)
+            # stdout carries the MCP protocol under stdio, so log to stderr
+            print(query, file=sys.stderr)
             with closing(sqlite3.connect(self.db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 with closing(conn.cursor()) as cursor:
@@ -90,140 +89,82 @@ class SqliteDatabase:
 
 db = SqliteDatabase(DB_PATH)
 
-@mcp.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
-    """List available tools"""
-    return [
-            types.Tool(
-                name="read_query",
-                description="Execute a SELECT query on the SQLite database",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "SELECT SQL query to execute"},
-                    },
-                    "required": ["query"],
-                },
-            ),
-            types.Tool(
-                name="list_tables",
-                description="List all tables in the SQLite database",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
-            ),
-            types.Tool(
-                name="describe_table",
-                description="Get the schema information for a specific table",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "table_name": {"type": "string", "description": "Name of the table to describe"},
-                    },
-                    "required": ["table_name"],
-                },
-            ),
-            types.Tool(
-                name="append_insight",
-                description="Add a business insight to the memo",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "insight": {"type": "string", "description": "Business insight discovered from data analysis"},
-                    },
-                    "required": ["insight"],
-                },
-            ),
-        ]
 
-
-
-@mcp.call_tool()
-async def handle_tool_call(
-    name: str, arguments: dict[str, Any] | None
-    )-> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    """Handle tool execution requests"""
+@mcp.tool()
+def read_query(query: str) -> str:
+    """Execute a SELECT query on the SQLite database"""
+    # FIXME : update here
+    if not query.strip().upper().startswith("SELECT"):
+        return "Error: Only SELECT queries are allowed for read_query"
     try:
-        if name == "list_tables":
-            results = db._execute_query(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-            return [types.TextContent(type="text", text=str(results))]
-
-        elif name == "describe_table":
-            if not arguments or "table_name" not in arguments:
-                raise ValueError("Missing table_name argument")
-            # results = db._execute_query(
-            #     f"PRAGMA table_info({arguments['table_name']})"
-            # )
-            # results = db._get_schema(arguments['table_name'])
-            # return [types.TextContent(type="text", text=str(results))]
-
-            results = db._execute_query(
-                    f"PRAGMA table_info({arguments['table_name']})"
-                )
-            return [types.TextContent(type="text", text=str(results))]
-
-        elif name == "append_insight":
-            if not arguments or "insight" not in arguments:
-                raise ValueError("Missing insight argument")
-
-            db.insights.append(arguments["insight"])
-            memo = db._synthesize_memo()
-
-            # Notify clients that the memo resource has changed
-            # await mcp.request_context.session.send_resource_updated(AnyUrl("memo://insights"))
-
-            return [types.TextContent(type="text", text="Insight added to memo")]
-
-        if not arguments:
-            raise ValueError("Missing arguments")
-
-        if name == "read_query":
-            # FIXME : update here
-            if not arguments["query"].strip().upper().startswith("SELECT"):
-                raise ValueError("Only SELECT queries are allowed for read_query")
-            results = db._execute_query(arguments["query"])
-            return [types.TextContent(type="text", text=str(results))]
-
-        # elif name == "create_table":
-        #     if not arguments["query"].strip().upper().startswith("CREATE TABLE"):
-        #         raise ValueError("Only CREATE TABLE statements are allowed")
-        #     db._execute_query(arguments["query"])
-        #     return [types.TextContent(type="text", text="Table created successfully")]
-
-        else:
-            raise ValueError(f"Unknown tool: {name}")
-
+        return str(db._execute_query(query))
     except sqlite3.Error as e:
-        return [types.TextContent(type="text", text=f"Database error: {str(e)}")]
-    except Exception as e:
-        return [types.TextContent(type="text", text=f"Error: {str(e)}")]
+        return f"Database error: {e}"
 
 
+@mcp.tool()
+def list_tables() -> str:
+    """List all tables in the SQLite database"""
+    try:
+        return str(
+            db._execute_query("SELECT name FROM sqlite_master WHERE type='table'")
+        )
+    except sqlite3.Error as e:
+        return f"Database error: {e}"
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-            print("Server running with stdio transport")
-            await mcp.run(
-                read_stream,
-                write_stream,
-                InitializationOptions(
-                    server_name="sqlite",
-                    server_version="0.1.0",
-                    capabilities=mcp.get_capabilities(
-                        notification_options=NotificationOptions(),
-                        experimental_capabilities={},
-                    ),
-                ),
-            )
 
-import asyncio
+@mcp.tool()
+def describe_table(table_name: str) -> str:
+    """Get the schema information for a specific table"""
+    # results = db._get_schema(table_name)
+    try:
+        return str(db._execute_query(f"PRAGMA table_info({table_name})"))
+    except sqlite3.Error as e:
+        return f"Database error: {e}"
+
+
+@mcp.tool()
+def append_insight(insight: str) -> str:
+    """Add a business insight to the memo"""
+    db.insights.append(insight)
+    memo = db._synthesize_memo()
+    print(f"Memo: {memo}")
+    return "Insight added to memo"
+
+
+# @mcp.tool()
+# def create_table(query: str) -> str:
+#     """Create a new table in the SQLite database"""
+#     if not query.strip().upper().startswith("CREATE TABLE"):
+#         return "Error: Only CREATE TABLE statements are allowed"
+#     db._execute_query(query)
+#     return "Table created successfully"
+
+
+TRANSPORT_URLS = {
+    "sse": f"http://{mcp.settings.host}:{mcp.settings.port}{mcp.settings.sse_path}",
+    "streamable-http": f"http://{mcp.settings.host}:{mcp.settings.port}{mcp.settings.streamable_http_path}",
+}
 
 if __name__ == "__main__":
-    # mcp.run(transport="stdio")
-    # mcp.run(transport="sse")
-    asyncio.run(main())
+    # usage: python sqlite_server.py [sse | streamable-http | stdio]   (default: sse)
+    transport = sys.argv[1] if len(sys.argv) > 1 else "sse"
+    if transport not in ("sse", "streamable-http", "stdio"):
+        sys.exit(f"Unknown transport '{transport}'. Use: sse, streamable-http or stdio")
+
+    # log to stderr: under stdio, stdout carries the MCP protocol
+    print(f"SQLite MCP server | database: {DB_PATH}", file=sys.stderr)
+    if transport == "stdio":
+        print(
+            "Running on stdio - waiting for an MCP client to connect (Ctrl+C to stop)",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"Running {transport} at {TRANSPORT_URLS[transport]} (Ctrl+C to stop)",
+            file=sys.stderr,
+        )
+
+    mcp.run(transport=transport)
 
 

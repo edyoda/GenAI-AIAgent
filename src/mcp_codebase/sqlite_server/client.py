@@ -11,6 +11,7 @@ from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp import ClientSession, StdioServerParameters
+from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from model_instance import llm
 
@@ -39,13 +40,19 @@ Instructions:
 # )
 
 
-async def main(question):
-    server_params = StdioServerParameters(
-        command="python",
-        args=[str(BASE_DIR / "sqlite_server.py")],
-    )
+# start the server first: python sqlite_server.py   (sse on port 8001)
+SERVER_URL = "http://127.0.0.1:8001/sse"
 
-    async with stdio_client(server_params) as (read, write):
+
+async def main(question):
+    # stdio alternative: launches the server itself, no need to start it first
+    # server_params = StdioServerParameters(
+    #     command="python",
+    #     args=[str(BASE_DIR / "sqlite_server.py"), "stdio"],
+    # )
+    # async with stdio_client(server_params) as (read, write):
+
+    async with sse_client(SERVER_URL) as (read, write):
         async with ClientSession(read, write) as session:
             # Initialize the connection
             await session.initialize()
