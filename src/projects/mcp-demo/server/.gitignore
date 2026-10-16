@@ -1,0 +1,6 @@
+.env
+.keys/
+.chroma/
+data/sales.db
+.venv/
+tokens.json
